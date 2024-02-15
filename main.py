@@ -3,14 +3,14 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementClickInterceptedException
 from webdriver_manager.chrome import ChromeDriverManager
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
+import gspread
 import os
 import time
 import pytz
@@ -24,28 +24,69 @@ extracted_data = [["Venue", "Date", "Time", "Booked Courts"]]
 # Load environment variables from .env file
 load_dotenv()
 
-
-
-# Format the date as YYYY-MM-DD
-
-
-
 # Replace with your email from the .env file
 YOUR_EMAIL = os.getenv('YOUR_EMAIL')
+MY_EMAIL = os.getenv('MY_EMAIL')
 USER_EMAIL = os.getenv('USER_EMAIL')
 USER_PASSWORD = os.getenv('USER_PASSWORD')
 
-# Path to your credentials.json file from the .env file
-SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE')
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
 
-credentials = Credentials.from_service_account_file(
-    SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+# Load Google Sheets credentials from environment variable
+google_credentials_path = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH')
+if not google_credentials_path:
+    raise ValueError("The Google Sheets credentials path is not set in the environment variables")
+
+# Set the scope and credentials for Google Sheets
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name(google_credentials_path, scope)
+client = gspread.authorize(creds)
+
+# Open the Google Spreadsheet by title
+sheet_url = "https://docs.google.com/spreadsheets/d/1ImUhNYctOUVSLtdktvzsnd8zkpzVDedPYhSix7CRg8c/edit?usp=sharing"
+spreadsheet = client.open_by_url(sheet_url)
+
+
+
+def delete_file(file_path):
+    # Check if file exists
+    if os.path.exists(file_path):
+        # Delete the file
+        os.remove(file_path)
+        print(f"File {file_path} has been deleted.")
+    else:
+        print(f"The file {file_path} does not exist.")
 
 def extract():    
     current_date = datetime.now()
     date_index = current_date.strftime("%Y-%m-%d")
+    am_pm = current_date.strftime("%p")
+    
+    # Toggle between 'AM' and 'PM'
     hour_index = int(current_date.strftime("%H"))
+    hour_with_am_pm = 'PM' if am_pm == 'PM' else 'AM'
+    hour_value = hour_index - 12 if am_pm == 'PM' else hour_index
+    
+    if hour_index == 10:
+        hour_value = 10
+        hour_with_am_pm = 'PM'
+    if hour_index == 11:
+        hour_value = hour_index - 12
+        hour_with_am_pm = 'PM'
+        
+    folder_name = f"extracted-{date_index}"
+    
+    # Define the file name
+    if hour_index < 9:
+        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~0{str(hour_index + 1)}).txt"
+    elif hour_index == 9:
+        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~{str(hour_index + 1)}).txt"
+    else:
+        file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
+
+    # Define the full path (folder + file name)
+    full_path = os.path.join(folder_name, file_name)
+    delete_file(full_path)
+    
     chrome_options = Options()
     chrome_options.add_argument("--headless")  # Ensure GUI is off
     chrome_options.add_argument("--window-size=1920,1080")  # Set a window size
@@ -53,7 +94,7 @@ def extract():
 
 
     # Initialize the Chrome driver
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options = chrome_options)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
     # Open the website
     driver.get("https://bookings.padel.haus/users/sign_in")
@@ -75,42 +116,93 @@ def extract():
     # Wait for the login button to be clickable and click it
     login_button = wait.until(EC.element_to_be_clickable((By.NAME, "commit")))
     login_button.click()
-    time.sleep(1)
+    time.sleep(1)        
         
     for i, url in enumerate(urls):
         driver.get(url)
-        time.sleep(1)
-        venue_buttons = driver.find_element(By.ID, "facilities-tags").find_elements(By.TAG_NAME, 'button')
+        time.sleep(2)
+        try: 
+            venue_buttons = driver.find_element(By.ID, "facilities-tags").find_elements(By.TAG_NAME, 'button')
+        except TimeoutException as e:
+            time.sleep(2)
+            driver.get(url)
+            venue_buttons = driver.find_element(By.ID, "facilities-tags").find_elements(By.TAG_NAME, 'button')
+        except Exception as e:
+            print(f"An unexpected error occurred1: {e}")
+            time.sleep(2)
+            delete_file(full_path)
+            driver.quit()
+            return extract()                                  
+        time.sleep(2)
         venue_buttons[i].click()
         time.sleep(3)
-        book_button = WebDriverWait(driver, 2).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.ui.button.large.fluid.white"))
-        )
-        book_button.click()
+        
+        try: 
+            book_button = WebDriverWait(driver, 2).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "a.ui.button.large.fluid.white"))
+            )
+            book_button.click()
+        except Exception as e:
+            print(f"An unexpected error occurred2: {e}")
+            time.sleep(2)
+            delete_file(full_path)
+            driver.quit()
+            return extract()
+                
         # Wait for the buttons with the class name "ui button selectable basic" to be loaded
-        time.sleep(1)
+        time.sleep(2)
         try:
             wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='submit'][name='commit'][value='Accept']")))
             accept_button = driver.find_element(By.CSS_SELECTOR, "input[type='submit'][name='commit'][value='Accept']")
             accept_button.click()
-        except TimeoutException:
-            time.sleep(1)
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui.button.selectable.basic")))
-
-        days_list_div = driver.find_element(By.CLASS_NAME, "DaysRangeOptions")
-        day_buttons = days_list_div.find_elements(By.TAG_NAME, "button")    
-        for d, day_button in enumerate(day_buttons):
-            date = f"2024-01-{driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[d].find_element(By.CLASS_NAME, 'day_number').text}"
-            driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[d].click()
-            time.sleep(1)
-            
-            # Re-find the 'hours_list_div' and 'hour_buttons'
-            hours_list_div = driver.find_element(By.CLASS_NAME, 'hours_list')
-            hour_buttons = driver.find_element(By.CLASS_NAME, 'hours_list').find_elements(By.TAG_NAME, "button")            
-                
-            for index, hour_button in enumerate(hour_buttons):
-                soup = BeautifulSoup(driver.page_source, features="html.parser")
-                class_name = soup.find(class_='hours_list').find_all('button')[index].get('class')
+        except TimeoutException as e:
+            time.sleep(2)
+        except Exception as e:
+            print(f"An unexpected error occurred3: {e}")
+            time.sleep(2)
+            delete_file(full_path)
+            driver.quit()
+            return extract()
+        
+        try:
+            wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui.button.selectable.basic")))
+        except TimeoutException as e:
+            time.sleep(2)
+            try:
+                wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".ui.button.selectable.basic")))
+            except TimeoutException as e:
+                time.sleep(2)
+        except Exception as e:
+            print(f"An unexpected error occurred4: {e}")
+            time.sleep(2)
+            delete_file(full_path)
+            driver.quit()
+            return extract()
+        
+        time.sleep(3)
+        
+        try:
+            day_buttons = driver.find_element(By.CLASS_NAME, "DaysRangeOptions").find_elements(By.TAG_NAME, "button")           
+        except Exception as e:
+                print(f"An unexpected error occurred5: {e}")  
+                time.sleep(2) 
+                try:
+                    day_buttons = driver.find_element(By.CLASS_NAME, "DaysRangeOptions").find_elements(By.TAG_NAME, "button")  
+                except Exception as e:
+                    print(f"An unexpected error occurred6: {e}")  
+                    time.sleep(2)  
+        date = date_index
+        driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0].click()
+        time.sleep(1)
+                  
+        soup_hour_buttons = BeautifulSoup(driver.page_source, features="html.parser").find(class_='hours_list').find_all('button')
+        for index, hour_button in enumerate(soup_hour_buttons):
+            soup = BeautifulSoup(driver.page_source, features="html.parser")
+            if f"{str(hour_value + 2)}{hour_with_am_pm}" in soup.find(class_='hours_list').find_all('button')[index].text.upper():
+                if index < len(soup.find(class_='hours_list').find_all('button')):
+                    class_name = soup.find(class_='hours_list').find_all('button')[index].get('class')
+                else:
+                    continue
                 if "red" in class_name:
                     venue = venues[i]
                     hour = soup.find(class_='hours_list').find_all('button')[index].text.replace(' +', '')
@@ -125,7 +217,12 @@ def extract():
                         os.makedirs(folder_name)
 
                     # Define the file name
-                    file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
+                    if hour_index < 9:
+                        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~0{str(hour_index + 1)}).txt"
+                    elif hour_index == 9:
+                        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~{str(hour_index + 1)}).txt"
+                    else:
+                        file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
 
                     # Define the full path (folder + file name)
                     full_path = os.path.join(folder_name, file_name)
@@ -136,13 +233,13 @@ def extract():
                 else:
                     try:
                         driver.find_element(By.CLASS_NAME, 'hours_list').find_elements(By.TAG_NAME, "button")[index].click()
-                    except TimeoutException:
+                    except TimeoutException as e:
                         time.sleep(1)   
                         try:
-                            driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[d].click()
+                            driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0].click()
                             time.sleep(1)   
                             driver.find_element(By.CLASS_NAME, 'hours_list').find_elements(By.TAG_NAME, "button")[index].click()
-                        except TimeoutException:
+                        except TimeoutException as e:
                             time.sleep(1)   
                         except Exception as e:
                             print(f"An unexpected error occurred: {e}")  
@@ -167,7 +264,12 @@ def extract():
                         os.makedirs(folder_name)
 
                     # Define the file name
-                    file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
+                    if hour_index <=8:
+                        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~0{str(hour_index + 1)}).txt"
+                    elif hour_index ==9:
+                        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~{str(hour_index + 1)}).txt"
+                    else:
+                        file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
 
                     # Define the full path (folder + file name)
                     full_path = os.path.join(folder_name, file_name)
@@ -175,115 +277,81 @@ def extract():
                     # Now, write to the file at the specified path
                     with open(full_path, 'a', encoding='utf-8') as file:
                         file.write(', '.join(map(str, record)) + '\n')
-                    driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[d].click() 
+                    
+                    if driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0]:
+                        driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0].click() 
                     time.sleep(1)  
-                
-            time.sleep(1)  # Wait for 2 seconds before clicking the next button
+            
+        time.sleep(1)  # Wait for 2 seconds before clicking the next button
 
     # Close the browser
     driver.quit()
-import os
-from googleapiclient.discovery import build
+    save_sheet_to_me()
 
-import os
-from googleapiclient.discovery import build
+def save_sheet_to_me():
+    # Get the worksheet by name
+    worksheet_name = "Sheet1"
+    worksheet = spreadsheet.get_worksheet(0)
+    worksheet2 = spreadsheet.get_worksheet(1)
 
-import os
-from googleapiclient.discovery import build
+    # If the worksheet is not found, create a new one
+    if worksheet is None:
+        worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows="100", cols="20")
 
-def save_sheet():
+    # Define the header names
+    header_names = ["Venue", "Date", "Time", "Booked Courts"]
+    # Check if the worksheet is empty (no header row) and add headers if needed
+    existing_headers = worksheet.row_values(1)
+    existing_headers2 = worksheet2.row_values(1)
+    if not existing_headers:
+        worksheet.insert_row(header_names, index=1)
+    if not existing_headers2:
+        worksheet2.insert_row(header_names, index=1)
+    
     current_date = datetime.now()
     date_index = current_date.strftime("%Y-%m-%d")
-    folder_path = f"extracted-{date_index}"
+    hour_index = int(current_date.strftime("%H"))
+    # Define the folder name where you want to save the file
+    folder_name = f"extracted-{date_index}"
 
-    # Build the service for both Sheets and Drive API
-    sheets_service = build('sheets', 'v4', credentials=credentials)
-    drive_service = build('drive', 'v3', credentials=credentials)
+    # Create the folder if it doesn't exist
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
 
-    # Create a new spreadsheet
-    spreadsheet_body = {
-        'properties': {
-            'title': f"Padel Haus {date_index}"
-        }
-    }
-    spreadsheet = sheets_service.spreadsheets().create(body=spreadsheet_body, fields='spreadsheetId').execute()
-    spreadsheet_id = spreadsheet.get('spreadsheetId')
-    print('Spreadsheet ID:', spreadsheet_id)
+    # Define the file name
+    if hour_index <=8:
+        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~0{str(hour_index + 1)}).txt"
+    elif hour_index ==9:
+        file_name = f"Padel Haus {date_index}-(0{str(hour_index)}~{str(hour_index + 1)}).txt"
+    else:
+        file_name = f"Padel Haus {date_index}-({str(hour_index)}~{str(hour_index + 1)}).txt"
 
-    # Share the spreadsheet with your email
-    drive_permission_body = {
-        'type': 'user',
-        'role': 'writer',
-        'emailAddress': YOUR_EMAIL
-    }
-    drive_service.permissions().create(fileId=spreadsheet_id, body=drive_permission_body, fields='id').execute()
+    # Define the full path (folder + file name)
+    full_path = os.path.join(folder_name, file_name) 
 
-    # Retrieve spreadsheet details to get the ID of the default sheet
-    spreadsheet_details = sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-    sheet1_id = spreadsheet_details['sheets'][0]['properties']['sheetId']
-
-    # Initialize a flag to check if we have created the first new sheet
-    first_new_sheet_created = False
-
-    # Loop through all files in the specified folder
-    for file_name in os.listdir(folder_path):
-        will_save_data = [["Venue", "Date", "Time", "Booked Courts"]]
-        # Check if the file is a text file
-        if file_name.endswith('.txt'):
-            with open(os.path.join(folder_path, file_name), 'r', encoding='utf-8') as file:
-                # Read each line in the file
-                for line in file:
-                    # Split the line by ', ' and strip any whitespace or newline characters
-                    record = [element.strip() for element in line.split(', ')]
-                    # Append the array to the list of records
-                    will_save_data.append(record)
-
-            # Create a new worksheet (subsheet) for each file
-            subsheet_title = file_name.replace('.txt', '')
-            batch_update_spreadsheet_request_body = {
-                'requests': [{
-                    'addSheet': {
-                        'properties': {
-                            'title': subsheet_title
-                        }
-                    }
-                }]
-            }
-            sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=batch_update_spreadsheet_request_body).execute()
-
-            # After creating the first new sheet, delete the default "Sheet1"
-            if not first_new_sheet_created:
-                delete_sheet_request = {
-                    'requests': [{
-                        'deleteSheet': {
-                            'sheetId': sheet1_id
-                        }
-                    }]
-                }
-                sheets_service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=delete_sheet_request).execute()
-                first_new_sheet_created = True
-
-            # Save data to the created subsheet
-            data_body = {
-                'values': will_save_data
-            }
-            sheets_service.spreadsheets().values().update(
-                spreadsheetId=spreadsheet_id,
-                range=f'{subsheet_title}!A1',
-                valueInputOption='RAW',
-                body=data_body).execute()
-
-            # Optional: Rename the file to indicate completion
-            # os.rename(os.path.join(folder_path, file_name), os.path.join(folder_path, file_name.replace(".txt", "_completed.txt")))
-
+    # Check if the file is a text file
+    if os.path.exists(full_path):
+        with open(full_path, 'r', encoding='utf-8') as file:
+            # Read each line in the file
+            for line in file:
+                # Split the line by ', ' and strip any whitespace or newline characters
+                record = [element.strip() for element in line.split(', ')]
+                if record[0] == 'Williamsburg':
+                    worksheet.append_row(record)
+                elif record[0] == 'Dumbo':
+                    worksheet2.append_row(record)
+                time.sleep(1)
+        
     print('Data has been written to the spreadsheet.')
 
 
-
-
+# save_sheet_to_me()
+# save_sheet()
 # while True:    
 #     extract()
 #     time.sleep(5)
+#     save_sheet_to_me()
+
 schedule.every().day.at("06:45").do(extract)
 
 
@@ -330,7 +398,7 @@ schedule.every().day.at("20:45").do(extract)
 
 
 schedule.every().day.at("21:45").do(extract)
-schedule.every().day.at("22:00").do(save_sheet)
+
 
 while True:
     schedule.run_pending()
