@@ -198,7 +198,7 @@ def extract():
         soup_hour_buttons = BeautifulSoup(driver.page_source, features="html.parser").find(class_='hours_list').find_all('button')
         for index, hour_button in enumerate(soup_hour_buttons):
             soup = BeautifulSoup(driver.page_source, features="html.parser")
-            if f"{str(hour_value + 2)}{hour_with_am_pm}" in soup.find(class_='hours_list').find_all('button')[index].text.upper():
+            if f"-{str(hour_value + 2)}{hour_with_am_pm}" in soup.find(class_='hours_list').find_all('button')[index].text.upper():
                 if index < len(soup.find(class_='hours_list').find_all('button')):
                     class_name = soup.find(class_='hours_list').find_all('button')[index].get('class')
                 else:
