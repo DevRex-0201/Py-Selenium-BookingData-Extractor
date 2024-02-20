@@ -33,10 +33,9 @@ The Padel Court Booking Data Extractor and Scheduler is a Python application des
    - Create a `.env` file in the project directory.
    - Add the following environment variables:
      ```
-     YOUR_EMAIL=your_email@example.com
      USER_EMAIL=padel_user@example.com
      USER_PASSWORD=your_password
-     SERVICE_ACCOUNT_FILE=path/to/your/credentials.json
+     GOOGLE_SHEETS_CREDENTIALS_PATH=path/to/your/credentials.json
      ```
 
 4. **Google API Credentials**

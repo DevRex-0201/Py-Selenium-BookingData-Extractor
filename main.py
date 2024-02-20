@@ -25,8 +25,6 @@ extracted_data = [["Venue", "Date", "Time", "Booked Courts"]]
 load_dotenv()
 
 # Replace with your email from the .env file
-YOUR_EMAIL = os.getenv('YOUR_EMAIL')
-MY_EMAIL = os.getenv('MY_EMAIL')
 USER_EMAIL = os.getenv('USER_EMAIL')
 USER_PASSWORD = os.getenv('USER_PASSWORD')
 
@@ -60,12 +58,14 @@ def extract():
     current_date = datetime.now()
     date_index = current_date.strftime("%Y-%m-%d")
     am_pm = current_date.strftime("%p")
-    
+    is_saturday = current_date.weekday() == 5
+    is_sunday = current_date.weekday() == 6
     # Toggle between 'AM' and 'PM'
     hour_index = int(current_date.strftime("%H"))
     hour_with_am_pm = 'PM' if am_pm == 'PM' else 'AM'
     hour_value = hour_index - 12 if am_pm == 'PM' else hour_index
-    
+    if (is_saturday or is_sunday) and ((hour_with_am_pm == 'AM' and hour_index == 5) or (hour_with_am_pm == 'PM' and hour_index == 9)):
+        return print('Saturyday Time')
     if hour_index == 10:
         hour_value = 10
         hour_with_am_pm = 'PM'
@@ -192,7 +192,14 @@ def extract():
                     print(f"An unexpected error occurred6: {e}")  
                     time.sleep(2)  
         date = date_index
-        driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0].click()
+        try:
+            driver.find_element(By.CLASS_NAME, 'DaysRangeOptions').find_elements(By.TAG_NAME, 'button')[0].click()
+        except Exception as e:
+            print(f"An unexpected error occurred4: {e}")
+            time.sleep(2)
+            delete_file(full_path)
+            driver.quit()
+            return extract()
         time.sleep(1)
                   
         soup_hour_buttons = BeautifulSoup(driver.page_source, features="html.parser").find(class_='hours_list').find_all('button')
@@ -352,6 +359,8 @@ def save_sheet_to_me():
 #     time.sleep(5)
 #     save_sheet_to_me()
 
+schedule.every().day.at("05:45").do(extract)
+
 schedule.every().day.at("06:45").do(extract)
 
 
@@ -398,6 +407,7 @@ schedule.every().day.at("20:45").do(extract)
 
 
 schedule.every().day.at("21:45").do(extract)
+
 
 
 while True:
