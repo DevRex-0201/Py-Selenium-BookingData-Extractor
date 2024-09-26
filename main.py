@@ -255,7 +255,7 @@ def extract():
                             time.sleep(1)         
                         time.sleep(1)
                         soup = BeautifulSoup(driver.page_source, features="html.parser")
-                        courts = soup.find_all(class_='over_flex_mobile_button_container')[2].find_all('button')
+                        courts = soup.find_all(class_='over_flex_mobile_button_container')[1].find_all('button')
                         venue = venues[i]
                         hour = soup.find(class_='hours_list').find_all('button')[index].text.replace(' +', '')            
                         booked_count = 4 - len(courts)
@@ -360,7 +360,7 @@ def save_sheet_to_me():
         print(f"An unexpected error occurred: {e}")  
         time.sleep(1)
         return save_sheet_to_me()    
-
+# extract()
 schedule.every().day.at("05:45").do(extract)
 
 schedule.every().day.at("06:45").do(extract)
@@ -378,7 +378,7 @@ schedule.every().day.at("09:45").do(extract)
 schedule.every().day.at("10:49").do(extract)
 
 
-schedule.every().day.at("11:45").do(extract)
+schedule.every().day.at("11:49").do(extract)
 
 
 schedule.every().day.at("12:45").do(extract)
@@ -409,7 +409,6 @@ schedule.every().day.at("20:45").do(extract)
 
 
 schedule.every().day.at("21:45").do(extract)
-
 
 
 while True:
