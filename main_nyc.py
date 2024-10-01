@@ -25,8 +25,8 @@ extracted_data = [["Venue", "Date", "Time", "Booked Courts"]]
 load_dotenv()
 
 # Replace with your email from the .env file
-USER_EMAIL = os.getenv('USER_EMAIL')
-USER_PASSWORD = os.getenv('USER_PASSWORD')
+USER_EMAIL = os.getenv('USER_EMAIL_NYC')
+USER_PASSWORD = os.getenv('USER_PASSWORD_NYC')
 
 
 # Load Google Sheets credentials from environment variable
@@ -69,7 +69,7 @@ def extract():
             hour_value = hour_index - 12
             hour_with_am_pm = 'PM'
             
-        folder_name = f"extracted-{date_index}"
+        folder_name = f"extracted-nyc-{date_index}"
         
         # Define the file name
         if hour_index < 9:
@@ -152,7 +152,7 @@ def extract():
                 print(record)                
                 extracted_data.append(record)
                 # Define the folder name where you want to save the file
-                folder_name = f"extracted-{date_index}"
+                folder_name = f"extracted-nyc-{date_index}"
 
                 # Create the folder if it doesn't exist
                 if not os.path.exists(folder_name):
@@ -199,7 +199,7 @@ def extract():
                 extracted_data.append(record)
                 print(record)
                 # Define the folder name where you want to save the file
-                folder_name = f"extracted-{date_index}"
+                folder_name = f"extracted-nyc-{date_index}"
 
                 # Create the folder if it doesn't exist
                 if not os.path.exists(folder_name):
@@ -258,7 +258,7 @@ def save_sheet_to_me():
         date_index = current_date.strftime("%Y-%m-%d")
         hour_index = int(current_date.strftime("%H"))
         # Define the folder name where you want to save the file
-        folder_name = f"extracted-{date_index}"
+        folder_name = f"extracted-nyc-{date_index}"
 
         # Create the folder if it doesn't exist
         if not os.path.exists(folder_name):
