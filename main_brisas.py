@@ -289,7 +289,7 @@ def save_sheet_to_me():
         print(f"An unexpected error occurred: {e}")  
         time.sleep(1)
         return save_sheet_to_me()    
-
+# extract()
 schedule.every().day.at("06:50").do(extract)
 
 

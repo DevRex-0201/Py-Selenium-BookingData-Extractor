@@ -375,10 +375,10 @@ schedule.every().day.at("08:45").do(extract)
 schedule.every().day.at("09:45").do(extract)
 
 
-schedule.every().day.at("10:49").do(extract)
+schedule.every().day.at("10:45").do(extract)
 
 
-schedule.every().day.at("11:49").do(extract)
+schedule.every().day.at("11:45").do(extract)
 
 
 schedule.every().day.at("12:45").do(extract)
